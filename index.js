@@ -1,10 +1,12 @@
 var strftime = require('prettydate').strftime;
+var urlParse = require('url').parse;
 
 module.exports = function generateCommonLog(request, response, options)
 {
     if (!request || !response) return '';
 
     options = options || {};
+
 
     var protocol = 'HTTP/' + request.httpVersion;
     var payload_len = (response._data && response._data.length) || request.headers['content-length'];
@@ -35,6 +37,68 @@ module.exports = function generateCommonLog(request, response, options)
     }
 
     remote = remote || '';
+
+
+    if(options.emitJSON){
+
+        const _headers = {
+            req: [        
+                'x-forwarded-for',
+                'request-id',
+                'from',
+                'connection',
+                'cf-ray',
+                'cf-connecting-ip',
+                'user-agent',
+                'content-length',
+                'content-type',
+                'referer',
+                'accept',
+            ],
+            res: [
+                'content-type',
+                'location',
+                'content-length'
+            ]
+        }
+
+        var event = {};
+
+        event['@timestamp'] = tstamp;
+        event.remoteAddress = remote;
+        event.method = request.method;
+        var fullURL = request.headers.host + request.url;
+        event.latency = elapsed;
+        event.url = fullURL
+        parsedURL = urlParse(fullURL);
+        if(parsedURL.query){
+            event.qs=parsedURL.query;
+        }
+
+        event.req = {};
+
+        event.req.httpVersion = request.httpVersion;
+        event.req.headers = {};
+        event.res = {};
+        event.res.headers = {};
+            _headers.req.forEach((k)=>{
+                if(request.headers[k]){
+                    event.req.headers[k] = request.headers[k]
+                }
+            })
+            _headers.res.forEach((k)=>{
+                let v = response.get(k)
+                if(v){
+                    event.req.headers[k] = v;
+                }
+            })
+        event.res.statusCode = response.statusCode;
+        if(response.statusCode == 500){
+            event.req.body = request.body;
+        }
+        return event;
+    }
+
 
     var fields = [
         remote.replace('::ffff:', ''), // client ip
